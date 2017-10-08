@@ -19,6 +19,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class MainActivity extends AppCompatActivity implements View.OnClickListener {
+    private static final String TAG = MainActivity.class.getSimpleName();
 
     private RecyclerView mRecyclerView;
     private MyRecyclerAdapter adapter;
@@ -38,9 +39,9 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         findViews();
-        setUIEnable(false);
+        setUIEnableStatus(false);
         DBUtils dbUtils = DBUtils.Instance(this);
-        mBookDao = dbUtils.getBookDao();
+        BookEntryDao  mBookDao = dbUtils.getBookDao();
 
         mBookEntryList = mBookDao.loadAll();
         adapter.setList(mBookEntryList);
@@ -87,8 +88,12 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         tvStatus = (TextView) findViewById(R.id.tvStatus);
     }
 
-
-    private void setControl(int id) {
+    /**
+     * 控制顯示畫面與修改新增狀態
+     *
+     * @param id
+     */
+    private void setInsertOrEditStatus(int id) {
         switch (id) {
             case R.id.insert:
                 mDBMode = 1;
@@ -104,12 +109,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         }
     }
 
-    private void setUIEnable(boolean isConfirm) {
-        adapter.setList(mBookEntryList);
-        tvStatus.setText("");
-        mDBMode = 0;
-        position = -1;
-
+    private void setUIEnableStatus(boolean isConfirm) {
         btnSubmit.setEnabled(isConfirm);
         btnCancel.setEnabled(isConfirm);
 
@@ -129,22 +129,48 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         entry.setMemo(etMemo.getText().toString());
         mBookDao.insertOrReplace(entry);
 
-        if (mDBMode == 1) {
-            mBookEntryList.add(entry);
-        } else if (mDBMode == 2) {
-            mBookEntryList.set(position, entry);
+        switch (mDBMode) {
+            case 1:
+                mBookEntryList.add(entry);
+                break;
+            case 2:
+                mBookEntryList.set(position, entry);
+                break;
+            default:
+                position = -1;
+                break;
         }
 
+        mBookEntryList = mBookDao.loadAll();
         adapter.setList(mBookEntryList);
+        mDBMode = 0;
+
     }
 
     @Override
     public void onClick(View view) {
-        switch (view.getId()) {
+        int id = view.getId();
+
+        //編輯狀態 且名稱與價錢為空
+        if ((mDBMode == 1 || mDBMode == 2) && id == R.id.submit && etName.getText().toString().isEmpty() &&
+                etPrice.getText().toString().isEmpty()) {
+            Toast.makeText(this, "書名或價錢不能為空", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        if (id == R.id.edit && position == -1) {
+            Toast.makeText(this, "請點選修改項目在進行修改", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        switch (id) {
             case R.id.delete:
-                if (position >= 0 && null != mBookEntryList.get(position) && !etName.getText().toString().isEmpty()) {
+                if (position >= 0 && null != mBookEntryList.get(position)) {
                     mBookDao.delete(mBookEntryList.get(position));
-                    mBookEntryList.remove(position);
+
+                    mBookEntryList = mBookDao.loadAll();
+                    adapter.setList(mBookEntryList);
+                    mDBMode = 0;
                     position = -1;
                 } else {
                     Toast.makeText(this, "無資料可刪除", Toast.LENGTH_SHORT).show();
@@ -153,19 +179,16 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
             case R.id.insert:
             case R.id.edit:
-                setUIEnable(true);
-                setControl(view.getId());
+                setUIEnableStatus(true);
+                setInsertOrEditStatus(id);
                 break;
             case R.id.submit:
+                setUIEnableStatus(false);
+                doInsertOrEdit();
+                break;
             case R.id.cancel:
-                if (!etName.getText().toString().isEmpty() && !etPrice.getText().toString().isEmpty() &&
-                        view.getId() == R.id.submit) {
-                    doInsertOrEdit();
-                }
-                setUIEnable(false);
+                setUIEnableStatus(false);
                 break;
         }
-
-
     }
 }
